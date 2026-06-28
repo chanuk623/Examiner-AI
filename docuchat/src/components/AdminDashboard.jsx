@@ -196,26 +196,30 @@ export default function AdminDashboard() {
   }
 
   // ─── VIEW 3: USER MANAGEMENT & APPROVAL PANEL ──────────────────────────────
-  return (
-    <div style={{ minHeight: '100dvh', background: 'var(--navy-900)', padding: 32 }}>
+return (
+    <div style={{ minHeight: '100dvh', background: 'var(--navy-900)', padding: '24px 16px' }}>
       <div style={{ maxWidth: 1000, margin: '0 auto' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border)', paddingBottom: 16, marginBottom: 24 }}>
+        
+        {/* Header Block */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border)', paddingBottom: 16, marginBottom: 24, gap: 12 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <Users color="#3b82f6" />
-            <h1 style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>User Management Dashboard</h1>
+            <Users color="#3b82f6" style={{ flexShrink: 0 }} />
+            <h1 style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)', margin: 0, lineHeight: 1.2 }}>User Management</h1>
           </div>
-          <button onClick={() => setCurrentView('gateway')} className="btn" style={{ padding: '8px 16px', fontSize: 12 }}>
-            ← Return to Gateway
+          <button onClick={() => setCurrentView('gateway')} className="btn" style={{ padding: '8px 14px', fontSize: 12, whiteSpace: 'nowrap' }}>
+            ← Gateway
           </button>
         </div>
 
+        {/* Action Status Notification Banner */}
         {actionStatus.message && (
           <div style={{ background: actionStatus.type === 'success' ? '#0a2a1a' : '#2a0a0a', border: `1px solid ${actionStatus.type === 'success' ? '#0f3a20' : '#3a1010'}`, borderRadius: 8, padding: 12, marginBottom: 20, fontSize: 13, color: actionStatus.type === 'success' ? 'var(--success)' : 'var(--danger)', display: 'flex', alignItems: 'center', gap: 8 }}>
-            {actionStatus.type === 'success' ? <Check size={16} /> : <AlertCircle size={16} />}
-            {actionStatus.message}
+            {actionStatus.type === 'success' ? <Check size={16} style={{ flexShrink: 0 }} /> : <AlertCircle size={16} style={{ flexShrink: 0 }} />}
+            <span style={{ wordBreak: 'break-word' }}>{actionStatus.message}</span>
           </div>
         )}
 
+        {/* Search Input Control */}
         <div style={{ position: 'relative', marginBottom: 20 }}>
           <Search size={16} color="var(--text-muted)" style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)' }} />
           <input 
@@ -227,6 +231,7 @@ export default function AdminDashboard() {
           />
         </div>
 
+        {/* Data Presenter Engine */}
         <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden' }}>
           {loading ? (
             <div style={{ padding: 48, textAlign: 'center' }}>
@@ -238,44 +243,97 @@ export default function AdminDashboard() {
               No registered profiles found matching your scope.
             </div>
           ) : (
-            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 13 }}>
-              <thead>
-                <tr style={{ background: 'var(--surface-2)', borderBottom: '1px solid var(--border)' }}>
-                  <th style={{ padding: '14px 20px', color: 'var(--text-muted)', fontWeight: 600 }}>Email Address</th>
-                  <th style={{ padding: '14px 20px', color: 'var(--text-muted)', fontWeight: 600 }}>Role</th>
-                  <th style={{ padding: '14px 20px', color: 'var(--text-muted)', fontWeight: 600 }}>Status</th>
-                  <th style={{ padding: '14px 20px', color: 'var(--text-muted)', fontWeight: 600, textAlign: 'right' }}>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredProfiles.map((user) => (
-                  <tr key={user.id} style={{ borderBottom: '1px solid var(--border)' }}>
-                    <td style={{ padding: '16px 20px', color: 'var(--text-primary)', fontWeight: 500 }}>{user.email}</td>
-                    <td style={{ padding: '16px 20px', color: 'var(--text-secondary)' }}>
-                      <span style={{ fontSize: 11, background: 'var(--navy-600)', padding: '2px 8px', borderRadius: 4, textTransform: 'uppercase', fontWeight: 600 }}>
-                        {user.role || 'user'}
-                      </span>
-                    </td>
-                    <td style={{ padding: '16px 20px' }}>
-                      <span style={{ fontSize: 12, fontWeight: 600, color: user.approved ? 'var(--success)' : 'var(--accent)' }}>
-                        {user.approved ? '● Approved Access' : '● Awaiting Grant'}
-                      </span>
-                    </td>
-                    <td style={{ padding: '16px 20px', textAlign: 'right' }}>
-                      {user.approved ? (
-                        <span style={{ color: 'var(--text-muted)', fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                          <Check size={14} color="var(--success)" /> Active Account
-                        </span>
-                      ) : (
-                        <button onClick={() => handleApproveUser(user.id)} className="btn btn-primary" style={{ padding: '6px 14px', fontSize: 12, borderRadius: 6 }}>
-                          Approve Profile
-                        </button>
-                      )}
-                    </td>
+            <>
+              {/* Media Queries for Responsive Table-to-Card Morphing */}
+              <style>{`
+                @media (max-width: 640px) {
+                  .responsive-table, .responsive-table thead, .responsive-table tbody, .responsive-table th, .responsive-table td, .responsive-table tr { 
+                    display: block; 
+                  }
+                  .responsive-table thead { 
+                    display: none; 
+                  }
+                  .responsive-table tr {
+                    border-bottom: 1px solid var(--border);
+                    padding: 16px;
+                    display: flex;
+                    flex-direction: column;
+                    gap: 12px;
+                  }
+                  .responsive-table tr:last-child {
+                    border-bottom: none;
+                  }
+                  .responsive-table td {
+                    padding: 0 !important;
+                    text-align: left !important;
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    gap: 16px;
+                    width: 100% !important;
+                  }
+                  .responsive-table td::before {
+                    content: attr(data-label);
+                    font-weight: 600;
+                    color: var(--text-muted);
+                    font-size: 11px;
+                    text-transform: uppercase;
+                    flex-shrink: 0;
+                  }
+                  .responsive-table td .user-email-text {
+                    word-break: break-all;
+                    text-align: right;
+                  }
+                  .responsive-table td .btn {
+                    width: 100%;
+                    text-align: center;
+                    justify-content: center;
+                    padding: 8px !important;
+                  }
+                }
+              `}</style>
+
+              <table className="responsive-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 13 }}>
+                <thead>
+                  <tr style={{ background: 'var(--surface-2)', borderBottom: '1px solid var(--border)' }}>
+                    <th style={{ padding: '14px 20px', color: 'var(--text-muted)', fontWeight: 600 }}>Email Address</th>
+                    <th style={{ padding: '14px 20px', color: 'var(--text-muted)', fontWeight: 600 }}>Role</th>
+                    <th style={{ padding: '14px 20px', color: 'var(--text-muted)', fontWeight: 600 }}>Status</th>
+                    <th style={{ padding: '14px 20px', color: 'var(--text-muted)', fontWeight: 600, textAlign: 'right' }}>Actions</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {filteredProfiles.map((user) => (
+                    <tr key={user.id} style={{ borderBottom: '1px solid var(--border)' }}>
+                      <td data-label="Email" style={{ padding: '16px 20px', color: 'var(--text-primary)', fontWeight: 500 }}>
+                        <span className="user-email-text">{user.email}</span>
+                      </td>
+                      <td data-label="Role" style={{ padding: '16px 20px', color: 'var(--text-secondary)' }}>
+                        <span style={{ fontSize: 11, background: 'var(--navy-600)', padding: '2px 8px', borderRadius: 4, textTransform: 'uppercase', fontWeight: 600 }}>
+                          {user.role || 'user'}
+                        </span>
+                      </td>
+                      <td data-label="Status" style={{ padding: '16px 20px' }}>
+                        <span style={{ fontSize: 12, fontWeight: 600, color: user.approved ? 'var(--success)' : 'var(--accent)' }}>
+                          {user.approved ? '● Approved Access' : '● Awaiting Grant'}
+                        </span>
+                      </td>
+                      <td data-label="Actions" style={{ padding: '16px 20px', textAlign: 'right' }}>
+                        {user.approved ? (
+                          <span style={{ color: 'var(--text-muted)', fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 4, marginLeft: 'auto' }}>
+                            <Check size={14} color="var(--success)" /> Active Account
+                          </span>
+                        ) : (
+                          <button onClick={() => handleApproveUser(user.id)} className="btn btn-primary" style={{ padding: '6px 14px', fontSize: 12, borderRadius: 6 }}>
+                            Approve Profile
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </>
           )}
         </div>
       </div>
