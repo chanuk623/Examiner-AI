@@ -7,9 +7,10 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: {
     autoRefreshToken: true,
     persistSession: true,
+    storage: window.localStorage,
     detectSessionInUrl: true,
   }
 })
 
 export const STORAGE_BUCKET = 'documents'
-export const MAX_STORAGE_BYTES = 500 * 1024 * 1024 // 500MB
+export const MAX_STORAGE_BYTES = 800 * 1024 * 1024 // 800MB

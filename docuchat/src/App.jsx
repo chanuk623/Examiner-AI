@@ -26,11 +26,29 @@ export default function App() {
   const [loadingDocs, setLoadingDocs] = useState(false)
   const [verifyingToken, setVerifyingToken] = useState(false) 
 
+  // Safeguard state to prevent aggressive redirects when the Android tab bounces back from 'inactive'
+  const [isWindowRecovering, setIsWindowRecovering] = useState(false)
+
   // Global custom toast trigger inside App wrapper
   function triggerLocalToast(msg) {
     setToast(msg)
     setTimeout(() => setToast(null), 2500)
   }
+
+  // Monitor Android window wake-up / focus restoration
+  useEffect(() => {
+    const handleFocus = () => {
+      setIsWindowRecovering(true)
+      // Provide a short window for the Supabase instance to re-verify session status from localStorage
+      const timer = setTimeout(() => {
+        setIsWindowRecovering(false)
+      }, 400)
+      return () => clearTimeout(timer)
+    }
+
+    window.addEventListener('focus', handleFocus)
+    return () => window.removeEventListener('focus', handleFocus)
+  }, [])
 
   // Intercept email verification parameters on initial mount
   useEffect(() => {
@@ -62,8 +80,8 @@ export default function App() {
     checkEmailVerification()
   }, [refreshProfile])
 
-  // Global Loader state across handshakes
-  if (session === undefined || loadingProfile || verifyingToken) {
+  // Global Loader state across handshakes (Now holds during tab focus recovery)
+  if (session === undefined || loadingProfile || verifyingToken || isWindowRecovering) {
     return (
       <div style={{ height: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--navy-900)' }}>
         <Loader size={24} color="var(--accent)" style={{ animation: 'spin 1s linear infinite' }} />
@@ -169,7 +187,6 @@ function MainApp({ session, profile, documents, setDocuments, showUploader, setS
         try {
           let base64 = null
           
-          // Only pull down a binary string if it's an image asset required for canvas rendering
           if (doc.is_image) {
             try {
               const blob = await downloadFileBuffer(doc.storage_path)
@@ -183,9 +200,6 @@ function MainApp({ session, profile, documents, setDocuments, showUploader, setS
             }
           }
 
-          // FIX: Instead of downloading and parsing PDFs/Word files locally every time the page mounts,
-          // we read the pre-parsed text safely from our Supabase database field (`doc.extracted_text` or `doc.content`).
-          // Adjust the property name below if your schema uses 'content' instead of 'extracted_text'.
           const savedText = doc.extracted_text || doc.content || '';
 
           const entry = { 
