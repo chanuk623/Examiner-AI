@@ -23,11 +23,79 @@ export default function ChatWindow({ documents }) {
   const [loading, setLoading] = useState(false)
   const [selectedCategories, setSelectedCategories] = useState([])
   const [attachedFile, setAttachedFile] = useState(null)
-  const [processingAttach, setProcessingAttach] = useState(false)
   const bottomRef = useRef(null)
   const inputRef = useRef(null)
-  const attachInputRef = useRef(null)
   const conversationHistory = useRef([])
+
+  // 1. Synchronize state with our chat-specific persistent window cache on component mounting
+  useEffect(() => {
+    if (window.__android_chat_file_cache) {
+      console.log("📱 [CHAT INTERCEPT] Restoring file attachment from global state:", window.__android_chat_file_cache.name)
+      setAttachedFile(window.__android_chat_file_cache)
+    }
+
+    const handleIncomingChatFile = (e) => {
+      if (e.detail) {
+        setAttachedFile(e.detail)
+      }
+    }
+
+    window.addEventListener('chat_attached_file_stream', handleIncomingChatFile)
+    return () => {
+      window.removeEventListener('chat_attached_file_stream', handleIncomingChatFile)
+    }
+  }, [])
+
+  // 2. Initialize an isolated, permanent native system input child attached straight to document.body
+  useEffect(() => {
+    if (!document.getElementById('android-persistent-chat-attach-input')) {
+      const inputEl = document.createElement('input')
+      inputEl.type = 'file'
+      inputEl.id = 'android-persistent-chat-attach-input'
+      inputEl.accept = '.pdf,.xlsx,.xls,.csv,.docx,.doc,.jpg,.jpeg,.png,.webp'
+      inputEl.style.cssText = 'position: fixed; top: -100px; left: -100px; width: 1px; height: 1px; opacity: 0; z-index: -1;'
+      
+      inputEl.addEventListener('change', async (e) => {
+        const file = e.target.files?.[0]
+        if (!file) return
+
+        const type = getFileType(file)
+        if (!type) { 
+          alert('Unsupported file type')
+          return 
+        }
+
+        // Broadcast processing initialization across layout layers
+        window.dispatchEvent(new CustomEvent('chat_attached_file_stream', { 
+          detail: { name: file.name, processing: true } 
+        }))
+
+        try {
+          const processed = await processFile(file)
+          const payload = { 
+            name: file.name, 
+            text: processed.text, 
+            isImage: processed.isImage, 
+            base64: processed.base64, 
+            mimeType: processed.mimeType,
+            processing: false
+          }
+          
+          // Commit to persistent global storage layout cache layers
+          window.__android_chat_file_cache = payload
+          window.dispatchEvent(new CustomEvent('chat_attached_file_stream', { detail: payload }))
+        } catch (err) {
+          alert('Could not process file: ' + err.message)
+          window.dispatchEvent(new CustomEvent('chat_attached_file_stream', { detail: null }))
+        }
+      })
+
+      document.body.appendChild(inputEl)
+    }
+  }, [])
+
+  // Absolute fallback configuration keeping global context execution thread intact
+  const currentProcessingState = attachedFile?.processing === true
 
   // Update welcome message when language changes
   useEffect(() => {
@@ -43,33 +111,32 @@ export default function ChatWindow({ documents }) {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, loading])
 
-  async function handleAttachFile(e) {
-    const file = e.target.files?.[0]
-    if (!file) return
-    const type = getFileType(file)
-    if (!type) { alert('Unsupported file type'); return }
-    setProcessingAttach(true)
-    try {
-      const processed = await processFile(file)
-      setAttachedFile({ name: file.name, text: processed.text, isImage: processed.isImage, base64: processed.base64, mimeType: processed.mimeType })
-    } catch (err) {
-      alert('Could not process file: ' + err.message)
-    } finally {
-      setProcessingAttach(false)
-      e.target.value = ''
-    }
+  // Direct element trigger bypassing React tree layout lifecycles safely
+  function triggerChatSystemPicker(e) {
+    e.preventDefault()
+    e.stopPropagation()
+    console.log("📂 Redirecting chat attachment interaction straight to background DOM node...")
+    document.getElementById('android-persistent-chat-attach-input')?.click()
+  }
+
+  function clearAttachedFile() {
+    window.__android_chat_file_cache = null
+    const nativeInput = document.getElementById('android-persistent-chat-attach-input')
+    if (nativeInput) nativeInput.value = ''
+    setAttachedFile(null)
   }
 
   async function sendMessage() {
     const text = input.trim()
-    if (!text || loading) return
+    if (!text || loading || currentProcessingState) return
 
     const userMsg = { id: Date.now(), role: 'user', text, timestamp: Date.now(), attachedFile: attachedFile?.name || null }
     setMessages(prev => [...prev, userMsg])
     conversationHistory.current.push({ role: 'user', text })
     setInput('')
+    
     const currentAttach = attachedFile
-    setAttachedFile(null)
+    clearAttachedFile() 
     setLoading(true)
 
     try {
@@ -126,18 +193,28 @@ export default function ChatWindow({ documents }) {
         <div ref={bottomRef} />
       </div>
 
-      {/* Attached file preview */}
+      {/* Attached file preview container with integrated animated loading dots */}
       {attachedFile && (
         <div style={{
           margin: '0 12px 8px', display: 'flex', alignItems: 'center', gap: 8,
           background: 'var(--surface-3)', border: '1px solid var(--border)', borderRadius: 8, padding: '8px 12px',
         }}>
-          <Paperclip size={13} color="var(--accent)" />
-          <span style={{ fontSize: 12, color: 'var(--text-secondary)', flex: 1 }} className="truncate">{attachedFile.name}</span>
-          {processingAttach && <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Processing...</span>}
-          <button onClick={() => setAttachedFile(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex', alignItems: 'center' }}>
-            <X size={13} />
-          </button>
+          <Paperclip size={13} color="var(--accent)" style={{ animation: currentProcessingState ? 'pulse 1.5s infinite' : 'none' }} />
+          <span style={{ fontSize: 12, color: 'var(--text-secondary)', flex: 1 }} className="truncate">
+            {attachedFile.name}
+          </span>
+          {currentProcessingState ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Processing</span>
+              <div className="loading-dots" style={{ display: 'inline-block', scale: '0.7', width: 'auto' }}>
+                <span /><span /><span />
+              </div>
+            </div>
+          ) : (
+            <button onClick={clearAttachedFile} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex', alignItems: 'center' }}>
+              <X size={13} />
+            </button>
+          )}
         </div>
       )}
 
@@ -147,18 +224,18 @@ export default function ChatWindow({ documents }) {
           <KnowledgeSelector availableCategories={availableCategories} selectedCategories={selectedCategories} onChange={setSelectedCategories} />
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
-          <input ref={attachInputRef} type="file" accept=".pdf,.xlsx,.xls,.csv,.docx,.doc,.jpg,.jpeg,.png,.webp" style={{ display: 'none' }} onChange={handleAttachFile} />
           <button
-            onClick={() => attachInputRef.current?.click()}
-            disabled={processingAttach}
+            onClick={triggerChatSystemPicker}
+            disabled={currentProcessingState || loading}
             style={{
               background: 'var(--surface-2)', border: '1px solid var(--border)',
               borderRadius: 10, width: 40, height: 40, cursor: 'pointer',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               color: 'var(--text-secondary)', flexShrink: 0, transition: 'all 0.15s',
+              opacity: currentProcessingState ? 0.6 : 1
             }}
           >
-            <Paperclip size={17} color={attachedFile ? 'var(--accent)' : undefined} />
+            <Paperclip size={17} color={attachedFile && !currentProcessingState ? 'var(--accent)' : undefined} />
           </button>
           <textarea
             ref={inputRef}
@@ -177,13 +254,13 @@ export default function ChatWindow({ documents }) {
           />
           <button
             onClick={sendMessage}
-            disabled={!input.trim() || loading}
+            disabled={!input.trim() || loading || currentProcessingState}
             style={{
-              background: (!input.trim() || loading) ? 'var(--surface-2)' : 'var(--accent)',
+              background: (!input.trim() || loading || currentProcessingState) ? 'var(--surface-2)' : 'var(--accent)',
               border: 'none', borderRadius: 10, width: 40, height: 40, cursor: 'pointer',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               flexShrink: 0, transition: 'all 0.15s',
-              color: (!input.trim() || loading) ? 'var(--text-muted)' : 'var(--navy-900)',
+              color: (!input.trim() || loading || currentProcessingState) ? 'var(--text-muted)' : 'var(--navy-900)',
             }}
           >
             <Send size={17} />
