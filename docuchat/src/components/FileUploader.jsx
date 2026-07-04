@@ -22,7 +22,6 @@ export default function FileUploader({ onUpload, onClose }) {
 
   const onDrop = useCallback((accepted) => {
     if (!accepted || accepted.length === 0) return
-    // Prevent duplicated items or empty assignments on mobile focus loss
     setQueued(prev => [...prev, ...accepted])
   }, [])
 
@@ -30,7 +29,13 @@ export default function FileUploader({ onUpload, onClose }) {
     onDrop, 
     accept: ACCEPTED, 
     multiple: true,
-    noKeyboard: true // Prevents physical mobile browser focus theft bugs
+    noKeyboard: true 
+  })
+
+  // Get input props and inject required identity tags safely
+  const nativeInputProps = getInputProps({
+    id: 'mobile-file-picker-input',
+    name: 'uploaded_files',
   })
 
   function removeQueued(idx) { setQueued(prev => prev.filter((_, i) => i !== idx)) }
@@ -42,20 +47,20 @@ export default function FileUploader({ onUpload, onClose }) {
     }
     if (queued.length === 0) return
     
-    // Pass queued files safely
     onUpload(queued, selectedCategory)
-    setQueued([]) // Flush queue state cleanly right before close to free memory pointers
+    setQueued([]) 
     onClose()
   }
 
   return (
-    <div style={{
-      position: 'fixed', inset: 0, zIndex: 100,
-      background: 'rgba(10,25,41,0.92)',
-      display: 'flex', alignItems: 'flex-end',
-      backdropFilter: 'blur(4px)',
-    }}
-    onClick={(e) => { if (e.target === e.currentTarget) onClose(); }} // Safe tap dismiss for mobile
+    <div 
+      style={{
+        position: 'fixed', inset: 0, zIndex: 100,
+        background: 'rgba(10,25,41,0.92)',
+        display: 'flex', alignItems: 'flex-end',
+        backdropFilter: 'blur(4px)',
+      }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
       <div style={{
         width: '100%', background: 'var(--surface)',
@@ -79,37 +84,45 @@ export default function FileUploader({ onUpload, onClose }) {
           </button>
         </div>
 
-        {/* Category picker */}
+        {/* Category picker - Fixed with HTML 'for' matching 'id' */}
         <div>
-          <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', letterSpacing: '0.06em' }}>
+          <label 
+            htmlFor="uploader-category-select"
+            style={{ display: 'block', fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', letterSpacing: '0.06em' }}
+          >
             {t.categoryLabel}
           </label>
           <select
+            id="uploader-category-select"
+            name="document_category"
             value={selectedCategory}
             onChange={e => setSelectedCategory(e.target.value)}
-            className="input" style={{ marginTop: 6 }}
+            className="input" 
+            style={{ marginTop: 6 }}
           >
             {t.categories.map(c => <option key={c} value={c}>{c}</option>)}
           </select>
         </div>
 
-        {/* Drop zone */}
-        <div
+        {/* Drop zone / File Input container - Fixed with label wrapping for hidden input */}
+        <label 
+          htmlFor="mobile-file-picker-input"
           {...getRootProps()}
           style={{
+            display: 'block',
             border: `2px dashed ${isDragActive ? 'var(--accent)' : 'var(--border)'}`,
             borderRadius: 10, padding: '28px 20px', textAlign: 'center', cursor: 'pointer',
             background: isDragActive ? 'rgba(232,160,32,0.05)' : 'var(--surface-2)',
             transition: 'all 0.15s',
           }}
         >
-          <input {...getInputProps()} />
+          <input {...nativeInputProps} />
           <Upload size={28} color={isDragActive ? 'var(--accent)' : 'var(--text-muted)'} style={{ margin: '0 auto 10px' }} />
           <div style={{ fontSize: 14, color: isDragActive ? 'var(--accent)' : 'var(--text-secondary)', fontWeight: 500 }}>
             {isDragActive ? t.dropzoneActive : t.dropzone}
           </div>
           <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>{t.dropzoneTypes}</div>
-        </div>
+        </label>
 
         {/* Queued files */}
         {queued.length > 0 && (
