@@ -5,14 +5,11 @@ import ChatWindow from './components/ChatWindow.jsx'
 import FileUploader from './components/FileUploader.jsx'
 import StorageBanner from './components/StorageBanner.jsx'
 import LoginPage from './pages/LoginPage.jsx'
-import AdminDashboard from './components/AdminDashboard.jsx' // 👈 Your new admin dashboard component
+import AdminDashboard from './components/AdminDashboard.jsx'
 import { processFile } from './utils/fileProcessor.js'
 import { addDocumentToBrain, removeDocumentFromBrain } from './utils/brainManager.js'
 import { uploadDocument, loadUserDocuments, deleteDocument, downloadFileBuffer, getStorageUsage } from './utils/storage.js'
 import { signOut, verifyOtp } from './utils/auth.js' 
-import { parsePdf } from './utils/pdfParser.js'
-import { parseExcel } from './utils/excelParser.js'
-import { parseWord } from './utils/wordParser.js'
 import { useAuth } from './context/AuthContext.jsx'
 import { useLang } from './i18n.jsx'
 import { Upload, Shield, Loader, LogOut, User, Clock } from 'lucide-react'
@@ -136,7 +133,7 @@ function PendingApprovalScreen({ profile }) {
             : `ඔබේ ගිණුම (${profile?.email}) පරිපාලක අනුමැතිය බලාපොරොත්තු වේ.`}
         </div>
       </div>
-      <button className="btn btn-ghost" onClick={() => signOut()}>
+      <button type="button" className="btn btn-ghost" onClick={() => signOut()}>
         <LogOut size={14} />
         {lang === 'en' ? 'Sign Out' : 'පිටවන්න'}
       </button>
@@ -167,28 +164,47 @@ function MainApp({ session, profile, documents, setDocuments, showUploader, setS
     try {
       const docs = await loadUserDocuments(session.user.id)
       const processed = []
+      
       for (const doc of docs) {
         try {
-          let text = ''
           let base64 = null
-          const blob = await downloadFileBuffer(doc.storage_path)
+          
+          // Only pull down a binary string if it's an image asset required for canvas rendering
           if (doc.is_image) {
-            const reader = new FileReader()
-            base64 = await new Promise(res => {
-              reader.onload = () => res(reader.result.split(',')[1])
-              reader.readAsDataURL(blob)
-            })
-          } else {
-            const file = new File([blob], doc.name, { type: doc.mime_type })
-            if (doc.file_type === 'pdf') text = await parsePdf(file)
-            else if (doc.file_type === 'excel') text = await parseExcel(file)
-            else if (doc.file_type === 'word') text = await parseWord(file)
+            try {
+              const blob = await downloadFileBuffer(doc.storage_path)
+              const reader = new FileReader()
+              base64 = await new Promise(res => {
+                reader.onload = () => res(reader.result.split(',')[1])
+                reader.readAsDataURL(blob)
+              })
+            } catch (imgErr) {
+              console.error('Failed to download image buffer:', doc.name, imgErr)
+            }
           }
-          const entry = { id: doc.id, name: doc.name, category: doc.category, type: doc.file_type, size: doc.size_bytes, isImage: doc.is_image, base64, mimeType: doc.mime_type, text, storage_path: doc.storage_path }
+
+          // FIX: Instead of downloading and parsing PDFs/Word files locally every time the page mounts,
+          // we read the pre-parsed text safely from our Supabase database field (`doc.extracted_text` or `doc.content`).
+          // Adjust the property name below if your schema uses 'content' instead of 'extracted_text'.
+          const savedText = doc.extracted_text || doc.content || '';
+
+          const entry = { 
+            id: doc.id, 
+            name: doc.name, 
+            category: doc.category, 
+            type: doc.file_type, 
+            size: doc.size_bytes, 
+            isImage: doc.is_image, 
+            base64, 
+            mimeType: doc.mime_type, 
+            text: savedText, 
+            storage_path: doc.storage_path 
+          }
+          
           addDocumentToBrain(entry)
           processed.push(entry)
         } catch (err) {
-          console.error('Failed to reload doc:', doc.name, err)
+          console.error('Failed to sync document metadata structure:', doc.name, err)
         }
       }
       setDocuments(processed)
@@ -263,15 +279,15 @@ function MainApp({ session, profile, documents, setDocuments, showUploader, setS
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <div style={{ display: 'flex', gap: 2, background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 20, padding: 3 }}>
             {['en', 'sin'].map(l => (
-              <button key={l} onClick={() => setLang(l)} style={{ padding: '3px 8px', borderRadius: 16, border: 'none', cursor: 'pointer', fontSize: 10, fontWeight: 700, background: lang === l ? 'var(--accent)' : 'transparent', color: lang === l ? 'var(--navy-900)' : 'var(--text-muted)', transition: 'all 0.15s' }}>
+              <button key={l} type="button" onClick={() => setLang(l)} style={{ padding: '3px 8px', borderRadius: 16, border: 'none', cursor: 'pointer', fontSize: 10, fontWeight: 700, background: lang === l ? 'var(--accent)' : 'transparent', color: lang === l ? 'var(--navy-900)' : 'var(--text-muted)', transition: 'all 0.15s' }}>
                 {l === 'en' ? 'ENG' : 'සිං'}
               </button>
             ))}
           </div>
-          <button className="btn btn-primary btn-sm" onClick={() => setShowUploader(true)} style={{ gap: 5 }}>
+          <button type="button" className="btn btn-primary btn-sm" onClick={() => setShowUploader(true)} style={{ gap: 5 }}>
             <Upload size={13} />{t.uploadBtn}
           </button>
-          <button onClick={signOut} title="Sign out" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 8, width: 32, height: 32, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>
+          <button type="button" onClick={signOut} title="Sign out" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 8, width: 32, height: 32, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>
             <LogOut size={14} />
           </button>
         </div>

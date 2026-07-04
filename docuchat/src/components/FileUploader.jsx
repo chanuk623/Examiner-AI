@@ -21,16 +21,30 @@ export default function FileUploader({ onUpload, onClose }) {
   const [queued, setQueued] = useState([])
 
   const onDrop = useCallback((accepted) => {
+    if (!accepted || accepted.length === 0) return
+    // Prevent duplicated items or empty assignments on mobile focus loss
     setQueued(prev => [...prev, ...accepted])
   }, [])
 
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({ onDrop, accept: ACCEPTED, multiple: true })
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({ 
+    onDrop, 
+    accept: ACCEPTED, 
+    multiple: true,
+    noKeyboard: true // Prevents physical mobile browser focus theft bugs
+  })
 
   function removeQueued(idx) { setQueued(prev => prev.filter((_, i) => i !== idx)) }
 
-  function handleUpload() {
+  function handleUpload(e) {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
     if (queued.length === 0) return
+    
+    // Pass queued files safely
     onUpload(queued, selectedCategory)
+    setQueued([]) // Flush queue state cleanly right before close to free memory pointers
     onClose()
   }
 
@@ -40,7 +54,9 @@ export default function FileUploader({ onUpload, onClose }) {
       background: 'rgba(10,25,41,0.92)',
       display: 'flex', alignItems: 'flex-end',
       backdropFilter: 'blur(4px)',
-    }}>
+    }}
+    onClick={(e) => { if (e.target === e.currentTarget) onClose(); }} // Safe tap dismiss for mobile
+    >
       <div style={{
         width: '100%', background: 'var(--surface)',
         border: '1px solid var(--border)', borderRadius: '16px 16px 0 0',
@@ -53,7 +69,7 @@ export default function FileUploader({ onUpload, onClose }) {
             <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)' }}>{t.uploadTitle}</div>
             <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>{t.uploadSubtitle}</div>
           </div>
-          <button onClick={onClose} style={{
+          <button type="button" onClick={onClose} style={{
             background: 'var(--surface-2)', border: '1px solid var(--border)',
             borderRadius: '50%', width: 32, height: 32, cursor: 'pointer',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -104,7 +120,7 @@ export default function FileUploader({ onUpload, onClose }) {
                 padding: '8px 10px', borderRadius: 6, background: 'var(--surface-2)', marginBottom: 6,
               }}>
                 <span style={{ fontSize: 13, color: 'var(--text-primary)', flex: 1 }} className="truncate">{f.name}</span>
-                <button onClick={() => removeQueued(i)} style={{
+                <button type="button" onClick={() => removeQueued(i)} style={{
                   background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 4,
                 }}>
                   <X size={13} />
@@ -116,8 +132,8 @@ export default function FileUploader({ onUpload, onClose }) {
 
         {/* Actions */}
         <div style={{ display: 'flex', gap: 10 }}>
-          <button className="btn btn-ghost" style={{ flex: 1 }} onClick={onClose}>{t.cancel}</button>
-          <button className="btn btn-primary" style={{ flex: 2 }} onClick={handleUpload} disabled={queued.length === 0}>
+          <button type="button" className="btn btn-ghost" style={{ flex: 1 }} onClick={onClose}>{t.cancel}</button>
+          <button type="button" className="btn btn-primary" style={{ flex: 2 }} onClick={handleUpload} disabled={queued.length === 0}>
             {t.uploadFiles(queued.length)}
           </button>
         </div>
