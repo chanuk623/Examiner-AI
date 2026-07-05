@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react'
+import React, { createContext, useContext, useEffect, useState, useRef } from 'react'
 import { supabase } from '../utils/supabase.js'
 import { getProfile } from '../utils/auth.js'
 
@@ -8,36 +8,55 @@ export function AuthProvider({ children }) {
   const [session, setSession] = useState(undefined) // undefined = loading
   const [profile, setProfile] = useState(null)
   const [loadingProfile, setLoadingProfile] = useState(false)
+  const hasLoadedOnce = useRef(false)
 
   useEffect(() => {
     // Get initial session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session)
-      if (session) loadProfile(session.user.id)
+      if (session) {
+        loadProfile(session.user.id, true) // true = initial load
+      } else {
+        hasLoadedOnce.current = true // no session, done loading
+      }
     })
 
-    // Listen for auth changes (magic link click lands here)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       setSession(session)
       if (session) {
-        await loadProfile(session.user.id)
+        if (hasLoadedOnce.current) {
+          // Silent refresh — don't touch loadingProfile
+          const p = await getProfile(session.user.id)
+          setProfile(p)
+        } else {
+          await loadProfile(session.user.id, true)
+        }
       } else {
         setProfile(null)
+        hasLoadedOnce.current = false
       }
     })
 
     return () => subscription.unsubscribe()
   }, [])
 
-  async function loadProfile(userId) {
-    setLoadingProfile(true)
+  async function loadProfile(userId, isInitial = false) {
+    // Only show the loading spinner on the very first load, never mid-session
+    if (isInitial) setLoadingProfile(true)
     const p = await getProfile(userId)
     setProfile(p)
-    setLoadingProfile(false)
+    if (isInitial) {
+      setLoadingProfile(false)
+      hasLoadedOnce.current = true
+    }
   }
 
   async function refreshProfile() {
-    if (session) await loadProfile(session.user.id)
+    if (session) {
+      // Explicit refresh (e.g. after OTP) — also silent, no loadingProfile
+      const p = await getProfile(session.user.id)
+      setProfile(p)
+    }
   }
 
   return (
