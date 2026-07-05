@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { Users, MessageSquare, ShieldCheck, Check, AlertCircle, Loader, LogOut, Search, ArrowLeft } from 'lucide-react'
 import { supabase } from '../utils/supabase.js'
 import { useLang } from '../i18n.jsx'
@@ -346,9 +346,72 @@ return (
 function AdminEmbeddedChatWrapper({ session, profile, documents, setDocuments, showUploader, setShowUploader, processing, setProcessing, processingStatus, setProcessingStatus, toast, setToast, storageUsed, setStorageUsed, loadingDocs, setLoadingDocs }) {
   const { lang, setLang } = useLang()
 
+  // Keep a ref to the queued files and selected category so the persistent
+  // background input's onChange closure always sees current values — even if
+  // Android suspends the tab and React re-renders on return.
+  const pendingFilesRef = useRef([])
+  const selectedCategoryRef = useRef(null) // set from FileUploader via callback
+  const [pendingFiles, setPendingFiles] = useState([])
+
   function showToast(msg) {
     setToast(msg)
     setTimeout(() => setToast(null), 2500)
+  }
+
+  // ── Persistent background input: survives Android focus-steal ──────────────
+  // This mirrors the exact pattern used in ChatWindow / FileUploader.
+  // It lives here (outside FileUploader's conditional render) so it is NEVER
+  // unmounted while the admin workspace is mounted — regardless of whether the
+  // uploader modal is open or not.
+  useEffect(() => {
+    const INPUT_ID = 'admin-persistent-upload-input'
+    if (!document.getElementById(INPUT_ID)) {
+      const el = document.createElement('input')
+      el.type = 'file'
+      el.id = INPUT_ID
+      el.multiple = true
+      el.accept = '.pdf,.xlsx,.xls,.csv,.docx,.doc,.jpg,.jpeg,.png,.webp'
+      el.style.cssText = 'position:fixed;top:-100px;left:-100px;width:1px;height:1px;opacity:0;z-index:-1;'
+
+      el.addEventListener('change', (e) => {
+        const files = Array.from(e.target.files || [])
+        if (!files.length) return
+        const updated = [...pendingFilesRef.current, ...files]
+        pendingFilesRef.current = updated
+        setPendingFiles([...updated])
+        // Write to window cache FIRST — FileUploader reads this on mount,
+        // which handles the race where the modal remounts after Android returns
+        window.__admin_file_cache = updated
+        // Also broadcast for the case where FileUploader is already mounted
+        window.dispatchEvent(new CustomEvent('admin_upload_file_stream', { detail: updated }))
+        e.target.value = ''
+      })
+
+      document.body.appendChild(el)
+    }
+
+    return () => {
+      // Do NOT remove the element on unmount — removing it would recreate the
+      // death-trap. It is intentionally left attached to document.body for the
+      // lifetime of the browser session.
+    }
+  }, [])
+
+  // Expose a trigger so FileUploader (and the Upload button) can open the picker
+  // without touching React-rendered inputs.
+  function triggerAdminFilePicker(e) {
+    if (e) { e.preventDefault(); e.stopPropagation() }
+    document.getElementById('admin-persistent-upload-input')?.click()
+  }
+
+  // FileUploader calls this when the user confirms the upload with a category selected.
+  // We intercept it here so we can clear our own ref state after processing.
+  async function handleUploadConfirm(files, category) {
+    setShowUploader(false)
+    pendingFilesRef.current = []
+    setPendingFiles([])
+    window.__admin_file_cache = null
+    await handleUpload(files, category)
   }
 
   useEffect(() => {
@@ -455,7 +518,13 @@ function AdminEmbeddedChatWrapper({ session, profile, documents, setDocuments, s
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <button className="btn btn-primary btn-sm" onClick={() => setShowUploader(true)}>Upload</button>
+          {/* Only opens the modal — the picker fires from inside the dropzone */}
+          <button
+            className="btn btn-primary btn-sm"
+            onClick={() => setShowUploader(true)}
+          >
+            Upload
+          </button>
         </div>
       </div>
 
@@ -471,7 +540,22 @@ function AdminEmbeddedChatWrapper({ session, profile, documents, setDocuments, s
       <DocumentList documents={documents} onRemove={handleRemoveDocument} onCategoryChange={handleCategoryChange} />
       <ChatWindow documents={documents} />
 
-      {showUploader && <FileUploader onUpload={handleUpload} onClose={() => setShowUploader(false)} />}
+      {/*
+        FileUploader is still shown as a confirmation modal, but it no longer
+        owns the file input element. Files arrive via the persistent background
+        input above and are forwarded through the 'admin_upload_file_stream'
+        event + pendingFiles prop. FileUploader's own dropzone still works for
+        desktop drag-and-drop.
+      */}
+      {showUploader && (
+        <FileUploader
+          onUpload={handleUploadConfirm}
+          onClose={() => setShowUploader(false)}
+          externalFiles={pendingFiles}
+          onTriggerPicker={triggerAdminFilePicker}
+          streamEvent="admin_upload_file_stream"
+        />
+      )}
       {toast && <div className="toast">{toast}</div>}
     </div>
   )

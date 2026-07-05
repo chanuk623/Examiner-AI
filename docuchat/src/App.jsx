@@ -26,29 +26,12 @@ export default function App() {
   const [loadingDocs, setLoadingDocs] = useState(false)
   const [verifyingToken, setVerifyingToken] = useState(false) 
 
-  // Safeguard state to prevent aggressive redirects when the Android tab bounces back from 'inactive'
-  const [isWindowRecovering, setIsWindowRecovering] = useState(false)
 
   // Global custom toast trigger inside App wrapper
   function triggerLocalToast(msg) {
     setToast(msg)
     setTimeout(() => setToast(null), 2500)
   }
-
-  // Monitor Android window wake-up / focus restoration
-  useEffect(() => {
-    const handleFocus = () => {
-      setIsWindowRecovering(true)
-      // Provide a short window for the Supabase instance to re-verify session status from localStorage
-      const timer = setTimeout(() => {
-        setIsWindowRecovering(false)
-      }, 400)
-      return () => clearTimeout(timer)
-    }
-
-    window.addEventListener('focus', handleFocus)
-    return () => window.removeEventListener('focus', handleFocus)
-  }, [])
 
   // Intercept email verification parameters on initial mount
   useEffect(() => {
@@ -80,8 +63,8 @@ export default function App() {
     checkEmailVerification()
   }, [refreshProfile])
 
-  // Global Loader state across handshakes (Now holds during tab focus recovery)
-  if (session === undefined || loadingProfile || verifyingToken || isWindowRecovering) {
+  // Global Loader state across handshakes
+  if (session === undefined || loadingProfile || verifyingToken) {
     return (
       <div style={{ height: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--navy-900)' }}>
         <Loader size={24} color="var(--accent)" style={{ animation: 'spin 1s linear infinite' }} />
