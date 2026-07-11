@@ -1,8 +1,13 @@
-// Gemini Flash client
 // Strict system prompt: answers ONLY from uploaded documents
-// Supports text + vision (handwritten docs, images)
+// Auto-swaps between available free models if a quota limit is met
 
-const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent'
+// List of free-tier models tried sequentially upon encountering a 429 error
+const AVAILABLE_MODELS = [
+  'gemini-2.5-flash-lite', // Your original primary model
+  'gemini-3.1-flash-lite', // The corrected newer generation lite model
+  'gemini-2.5-flash',      // Stable standard generation backup
+  'gemini-3.5-flash'       // Flagship fast model (Notice: NO "-lite" at the end)
+];
 
 const SYSTEM_PROMPT = `You are ExaminerAI, a professional legal knowledge assistant for Sri Lanka Motor Traffic Department examiners.
 
@@ -65,7 +70,7 @@ RULE 8 — LEGAL ACCURACY:
 These answers may be used in official legal and court proceedings. Accuracy is mandatory. When in doubt, write "Not stated in document" rather than guessing.`
 
 /**
- * Send a chat message to Gemini with document context
+ * Send a chat message to Gemini with document context (With Automatic Model Swapping)
  */
 export async function askGemini({
   question,
@@ -158,28 +163,60 @@ export async function askGemini({
     ]
   }
 
-  console.log('[Gemini] Sending request with', contents.length, 'message(s)')
+  // ==========================================
+  // 🔄 AUTO-SWAP LOGIC ENFORCEMENT
+  // ==========================================
+  for (let i = 0; i < AVAILABLE_MODELS.length; i++) {
+    const activeModel = AVAILABLE_MODELS[i];
+    const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${activeModel}:generateContent`;
+    
+    console.log(`[Gemini] Dispatching request via model: ${activeModel}`);
 
-  const response = await fetch(`${GEMINI_API_URL}?key=${apiKey}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(requestBody),
-  })
+    try {
+      const response = await fetch(`${GEMINI_API_URL}?key=${apiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestBody),
+      });
 
-  if (!response.ok) {
-    const err = await response.json().catch(() => ({}))
-    const msg = err.error?.message || 'GEMINI_ERROR'
-    console.error('[Gemini] Error:', response.status, msg)
-    if (response.status === 429) throw new Error('RATE_LIMIT')
-    if (response.status === 403) throw new Error('INVALID_API_KEY: ' + msg)
-    throw new Error('HTTP_' + response.status + ': ' + msg)
+      // Catch unsuccessful API responses
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        const msg = err.error?.message || 'GEMINI_ERROR';
+        console.error(`[Gemini] ${activeModel} failed with Status ${response.status}: ${msg}`);
+
+        // If the problem is a rate limit (429) and alternative models remain, switch model
+        if (response.status === 429 && i < AVAILABLE_MODELS.length - 1) {
+          console.warn(`[Gemini] Rate limit hit for ${activeModel}. Auto-swapping to the next tier...`);
+          continue; // Moves to the next index in the AVAILABLE_MODELS array loop
+        }
+
+        // Handle terminal states immediately (unauthorized, invalid body context, etc.)
+        if (response.status === 429) throw new Error('RATE_LIMIT');
+        if (response.status === 403) throw new Error('INVALID_API_KEY: ' + msg);
+        throw new Error('HTTP_' + response.status + ': ' + msg);
+      }
+
+      // Extract and package text response
+      const data = await response.json();
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (!text) {
+        console.error('[Gemini] Received an empty text package:', JSON.stringify(data));
+        throw new Error('EMPTY_RESPONSE');
+      }
+      
+      console.log(`[Gemini] Completed response generation successfully using: ${activeModel}`);
+      return text;
+
+    } catch (error) {
+      // Break out of the loop instantly if it's not a rate-limit error
+      if (!error.message.includes('RATE_LIMIT') && !error.message.includes('429')) {
+        throw error;
+      }
+      // Throw final error if all options have been exhausted
+      if (i === AVAILABLE_MODELS.length - 1) {
+        throw error;
+      }
+    }
   }
-
-  const data = await response.json()
-  const text = data.candidates?.[0]?.content?.parts?.[0]?.text
-  if (!text) {
-    console.error('[Gemini] Empty response:', JSON.stringify(data))
-    throw new Error('EMPTY_RESPONSE')
-  }
-  return text
 }
